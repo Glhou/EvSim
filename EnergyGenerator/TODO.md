@@ -1,0 +1,5 @@
+- generate random data of the server:
+  - pos static
+  - token dynamic
+- get data from clients
+- create the process to handle the auction
