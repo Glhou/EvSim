@@ -206,6 +206,26 @@ class ClosestTest(unittest.TestCase):
         }
         self.assertEqual(au.searchClosest(bids, pos), bids[0])
 
+    def test_square_corner(self):
+        bids = [{
+            "CarId": "ev-1",
+            "CarEnergy": 100,
+            "CarRadius": 100,
+            "CarLat": 0.6,
+            "CarLon": 0.6,
+        }, {
+            "CarId": "ev-2",
+            "CarEnergy": 100,
+            "CarRadius": 100,
+            "CarLat": 0,
+            "CarLon": 1
+        }]
+        pos = {
+            "lat": 0,
+            "lon": 0
+        }
+        self.assertEqual(au.searchClosest(bids, pos), bids[0])
+
 
 if __name__ == '__main__':
     unittest.main()

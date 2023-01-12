@@ -12,7 +12,9 @@ import threading
 import sys
 import time
 import json
+from geopy import distance
 
+PAUSE_TIME = 35  # 1800 30min normal (35s test)
 
 # Create a socket object
 serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -42,13 +44,21 @@ def on_new_client(clientsocket, addr):
     global energy
     global pos
     global bids
+    global soldState
     print("Got a connection from %s" % str(addr))
+    price = -1
     while True:
         data = clientsocket.recv(1024)
         message = data.decode('utf-8')
-        if message == "PRICE":
-            clientsocket.send(str(energy['basePrice']).encode('utf-8'))
-        if message.startswith("ACCEPT"):
+        if message.startswith("PRICE"):
+            ev = json.loads(f'{{{message.split("{")[1]}'.replace('\'', '\"'))
+            dist = distance.geodesic(
+                (ev['CarLat'], ev['CarLon']), (pos['lat'], pos['lon'])).km
+            price = energy['basePrice'] + min(int(abs(dist)/2), 10)
+            clientsocket.send(str(price).encode('utf-8'))
+        if message.startswith("POS"):
+            clientsocket.send(str(pos).encode('utf-8'))
+        if message.startswith("ACCEPT") and soldState == False:
             # get Ev json
             print(f'{{{message.split("{")[1]}')
             ev = json.loads(f'{{{message.split("{")[1]}'.replace('\'', '\"'))
@@ -56,7 +66,7 @@ def on_new_client(clientsocket, addr):
             bids.append(ev)
             print(f'Number of bids : {len(bids)}')
             # create a bid on interface
-            ir.sendBid(ev, energy['basePrice'], port)
+            ir.sendBid(ev, price, port)
         if not data:
             break
         print("Received from client: %s" % data.decode('utf-8'))
@@ -70,14 +80,18 @@ def energyThread():
     global pos
     global port
     global bids
+    global soldState
     while True:
         # do the auction or/and create new energy every 30 min
-        time.sleep(35)  # 1800 = 30 min
+        time.sleep(PAUSE_TIME)  # 1800 = 30 min (35s in test)
         if bids:
             # do the auction
             print('Auction in comming :')
             au.handleAuction(bids, energy, pos, port)
+            soldState = True
+            time.sleep(PAUSE_TIME)
         createEnergy()
+        soldState = False
 
 
 def createEnergy():
@@ -96,6 +110,7 @@ pos = gd.generatePos()
 print(f'Server pos : {pos["lat"]},{pos["lon"]}')
 
 createEnergy()
+soldState = False
 
 # start thread for energy
 threading.Thread(target=energyThread).start()
