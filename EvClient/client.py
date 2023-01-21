@@ -9,14 +9,21 @@ import sys
 import threading
 import time
 import json
+import logging
+
+logging.basicConfig(level=logging.WARNING)
 
 ev = gd.generateEv()
 
 HOST = 'glenn-ubuntu'
 
-PAUSE_TIME = 35  # 1800 = 30min normal (35s test)
+PAUSE_TIME = 10  # 1800 = 30min normal (35s test)
+TIMEOUT = 2
 
-accepted = False
+# If one of the generator in the X less pricy reply you are a winner you accept
+NB_BEST_GENERATOR = 3
+
+acceptedEnergy = False
 prices = []
 generators = []
 nbOfGenerators = 0  # number of generators that the client connected to
@@ -25,12 +32,13 @@ nbOfGenerators = 0  # number of generators that the client connected to
 try:
     ports = sys.argv[1:]
 except:
-    print("Please enter a list of ports number (ex : python client.py 4442 4443 ...")
+    logging.error(
+        "Please enter a list of ports number (ex : python client.py 4442 4443 ...")
     sys.exit()
 
 
 def handlePort(port):
-    global accepted
+    global acceptedEnergy
     global generators
     global nbOfGenerators
     # create a socket object
@@ -61,28 +69,48 @@ def handlePort(port):
     # receive price from the server
     price = int(s.recv(1024).decode('utf-8'))
 
-    print(f'Generator is {dist}km from the car')
+    if price > ev['CarMaxPrice']:
+        s.close()
+        return -1
 
-    print(f'Generator price is {price}')
+    logging.info(f'Generator is {dist}km from the car')
+
+    logging.info(f'Generator price is {price}')
 
     generators.append({'port': port, 'price': price, 'dist': dist})
 
-    # wait a bit
+    # wait a bit for other connections
     time.sleep(1)
 
-    # choose the generator in range with min price
-    choosedPort = cg.choose(generators, ev['CarRadius'])
+    # get the X less pricy generators, if one reply we automatically say ok
+    bestPorts = cg.chooseBestsPorts(
+        generators, ev['CarRadius'], NB_BEST_GENERATOR)
 
-    # accepting if minimum price
-    if port == choosedPort and not accepted:
-        print(f'Accepting {port} offer for {price}')
-        s.send(f'ACCEPT {ev}'.encode('utf-8'))
-        accepted = True
-        generators = []
-        # wait 30min and set accepted to false (35s in test)
-        time.sleep(PAUSE_TIME)
-        accepted = False
-    # close the connection
+    # accept all offer
+    logging.info(f'Accepting {port} offer for {price}')
+    s.send(f'ACCEPT {ev}'.encode('utf-8'))
+
+    # wait until get Results of the auction from the Generators
+    result = s.recv(1024).decode('utf-8')
+
+    if result.startswith('WON'):
+        if port in bestPorts:
+            # instantly win
+            logging.info(f'Won the auction for {port}')
+            acceptedEnergy = True
+            s.send(f'ACK {ev}'.encode('utf-8'))
+        else:
+            # wait for half timeout
+            time.sleep(TIMEOUT / 2)
+            if not acceptedEnergy:
+                # if we didn't get any other offer, we accept the offer
+                logging.info(f'Won the auction for {port}')
+                acceptedEnergy = True
+                s.send(f'ACK {ev}'.encode('utf-8'))
+            else:
+                # if we got an other offer, we reject the offer
+                logging.info(f'Rejected the auction for {port}')
+                s.send(f'NACK {ev}'.encode('utf-8'))
     s.close()
 
 

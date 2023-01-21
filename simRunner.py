@@ -4,11 +4,12 @@ import time
 import random
 import requests
 
+
 requests.get("http://127.0.0.1:8080/reset")  # reset the Interface on launch
 
 nbMinClient = 1
 nbMaxClient = 5
-nbServer = 10
+nbServer = 1
 
 ports = [4010 + i for i in range(nbServer)]
 
@@ -36,4 +37,4 @@ while True:
         t.start()
 
     # wait btw 5 and 30 min (for test 5-35s)
-    time.sleep(random.randint(5, 35))
+    time.sleep(random.randint(5, 10))
