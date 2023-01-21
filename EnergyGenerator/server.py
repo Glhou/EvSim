@@ -12,9 +12,13 @@ import threading
 import sys
 import time
 import json
+import logging
 from geopy import distance
 
-PAUSE_TIME = 35  # 1800 30min normal (35s test)
+logging.basicConfig(level=logging.INFO)
+
+PAUSE_TIME = 10  # 1800 30min normal (35s test)
+TIMEOUT = 5
 
 # Create a socket object
 serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -26,10 +30,10 @@ host = socket.gethostname()
 try:
     port = int(sys.argv[1])
 except:
-    print("Please enter a port number")
+    logging.error("Please enter a port number")
     sys.exit()
 
-print(f"Host: {host}:{port}")
+logging.info(f"Host: {host}:{port}")
 # Bind to the port
 serversocket.bind((host, port))
 
@@ -45,32 +49,62 @@ def on_new_client(clientsocket, addr):
     global pos
     global bids
     global soldState
-    print("Got a connection from %s" % str(addr))
+    global winner
+    global winnerAck
+    logging.info("Got a connection from %s" % str(addr))
     price = -1
+    ev = {}
+    auctionned = False
     while True:
-        data = clientsocket.recv(1024)
-        message = data.decode('utf-8')
+        message = ""
+        if not auctionned:
+            # we want to get the message while we auction
+            # this way we can check for the winner
+            data = clientsocket.recv(1024)
+            message = data.decode('utf-8')
+        if message.startswith("POS"):
+            logging.debug('Asked for POS')
+            clientsocket.send(str(pos).encode('utf-8'))
         if message.startswith("PRICE"):
+            logging.debug('Asked for PRICE')
             # get the ev
             ev = json.loads(f'{{{message.split("{")[1]}'.replace('\'', '\"'))
             dist = distance.geodesic(
                 (ev['CarLat'], ev['CarLon']), (pos['lat'], pos['lon'])).km
             price = energy['basePrice'] + min(int(abs(dist)/2), 10)
             clientsocket.send(str(price).encode('utf-8'))
-        if message.startswith("POS"):
-            clientsocket.send(str(pos).encode('utf-8'))
         if message.startswith("ACCEPT") and soldState == False:
+            logging.debug('Client ACCEPT')
             # get Ev json
-            print(f'{{{message.split("{")[1]}')
+            logging.debug(f'{{{message.split("{")[1]}')
             ev = json.loads(f'{{{message.split("{")[1]}'.replace('\'', '\"'))
             # add bid to bids
             bids.append(ev)
-            print(f'Number of bids : {len(bids)}')
+            logging.info(f'Number of bids : {len(bids)}')
             # create a bid on interface
             ir.sendBid(ev, price, port)
-        if not data:
-            break
-        print("Received from client: %s" % data.decode('utf-8'))
+            auctionned = True
+        if winner == ev and not winnerAck and auctionned:
+            logging.debug(f'Winning client is beeing contacted')
+            # ask the client if accept the energy
+            clientsocket.send("WON".encode('utf-8'))
+            # wait for the client to reply
+            data = clientsocket.recv(1024)
+            logging.debug(f'Winning client has replied')
+            if data.decode('utf-8').startswith("ACK"):
+                winnerAck = True
+                logging.info('Auction won')
+                clientsocket.close()
+            elif data.decode('utf-8').startswith('NACK'):
+                winnerAck = False
+                logging.info('Auction lost')
+                clientsocket.close()
+        if winnerAck and auctionned:
+            logging.debug('Client has lost')
+            try:
+                clientsocket.send("LOST".encode('utf-8'))
+            except:
+                pass
     clientsocket.close()
 
 # energy thread
@@ -82,15 +116,27 @@ def energyThread():
     global port
     global bids
     global soldState
+    global winner
+    global winnerAck
     while True:
         # do the auction or/and create new energy every 30 min
         time.sleep(PAUSE_TIME)  # 1800 = 30 min (35s in test)
         if bids:
             # do the auction
-            print('Auction in comming :')
-            au.handleAuction(bids, energy, pos, port)
-            soldState = True
-            time.sleep(PAUSE_TIME)
+            logging.info('Auction in comming :')
+            winnerAck = False
+            while not winnerAck and bids:
+                winner = au.handleAuction(bids, energy, pos)
+                # send a message to the winner in the on_new_client thread
+                time.sleep(TIMEOUT)  # timeout for client to reply
+                if not winnerAck:
+                    bids.remove(winner)  # we remove the winner and change it
+                    winner = None
+            if winner:
+                logging.info(f'Winner is {winner}')
+                ir.sendAuction(f"tok-{port}", winner['CarId'])
+                soldState = True
+                time.sleep(PAUSE_TIME)
         createEnergy()
         soldState = False
 
@@ -103,15 +149,17 @@ def createEnergy():
     bids = []  # reset all the bids
     energy = gd.generateEnergy()
     ir.sendEnergy(pos, energy, port)
-    print(
+    logging.info(
         f'New Energy :\nBasePrice : {energy["basePrice"]}, CreatedTime: {energy["createdTime"]}')
 
 
 pos = gd.generatePos()
-print(f'Server pos : {pos["lat"]},{pos["lon"]}')
+logging.info(f'Server pos : {pos["lat"]},{pos["lon"]}')
 
 createEnergy()
 soldState = False
+winner = None
+winnerAck = False
 
 # start thread for energy
 threading.Thread(target=energyThread).start()

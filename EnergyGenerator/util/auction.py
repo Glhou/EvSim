@@ -1,8 +1,11 @@
 # handle the auction function
 import util.interfaceRequests as ir
+import logging
 
 
 def searchClosest(bids, pos):
+    if not bids:
+        return None
     d_min = (bids[0]['CarLat'] - pos['lat'])**2 + \
         (bids[0]['CarLon'] - pos['lon'])
     closest = bids[0]
@@ -15,7 +18,7 @@ def searchClosest(bids, pos):
     return closest
 
 
-def handleAuction(bids, energy, pos, port):
+def handleAuction(bids, energy, pos):
     '''
     Parameters : distance, energy, number of generator available of a bid
     Here is the priority for the auction :
@@ -25,8 +28,10 @@ def handleAuction(bids, energy, pos, port):
     2. The bid with the less energy
     3. The bid with the less distance
     '''
-    print(f"Bidders : {', '.join([b['CarId'] for b in bids])}")
+    winner = None
+    logging.info(f"Bidders : {', '.join([b['CarId'] for b in bids])}")
     closest = searchClosest(bids, pos)
-    print(f'Closest bid : {closest}')
-    # send the winner to the closest
-    ir.sendAuction(f"tok-{port}", closest['CarId'])
+    logging.info(f'Closest bid : {closest}')
+    winner = closest
+    # send the winner
+    return winner
