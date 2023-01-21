@@ -18,15 +18,16 @@ ev = gd.generateEv()
 HOST = 'glenn-ubuntu'
 
 PAUSE_TIME = 10  # 1800 = 30min normal (35s test)
-TIMEOUT = 2
+TIMEOUT = 5
 
 # If one of the generator in the X less pricy reply you are a winner you accept
-NB_BEST_GENERATOR = 3
+NB_BEST_GENERATOR = 2
 
 acceptedEnergy = False
 prices = []
 generators = []
 nbOfGenerators = 0  # number of generators that the client connected to
+resultsQueue = []
 
 # Get the port number from the user
 try:
@@ -41,6 +42,7 @@ def handlePort(port):
     global acceptedEnergy
     global generators
     global nbOfGenerators
+    global resultsQueue
     # create a socket object
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -92,25 +94,33 @@ def handlePort(port):
 
     # wait until get Results of the auction from the Generators
     result = s.recv(1024).decode('utf-8')
+    resultsQueue.append(result)
 
-    if result.startswith('WON'):
-        if port in bestPorts:
+    # wait for the results to be first in the results queue
+    while resultsQueue[0] != result:
+        time.sleep(0.1)
+
+    if result.startswith('WON') and not acceptedEnergy:
+        if port in bestPorts and not acceptedEnergy:
             # instantly win
-            logging.info(f'Won the auction for {port}')
             acceptedEnergy = True
+            logging.info(f'Won the auction for {port}')
             s.send(f'ACK {ev}'.encode('utf-8'))
         else:
             # wait for half timeout
             time.sleep(TIMEOUT / 2)
             if not acceptedEnergy:
                 # if we didn't get any other offer, we accept the offer
-                logging.info(f'Won the auction for {port}')
                 acceptedEnergy = True
+                logging.info(f'Won the auction for {port}')
                 s.send(f'ACK {ev}'.encode('utf-8'))
             else:
                 # if we got an other offer, we reject the offer
                 logging.info(f'Rejected the auction for {port}')
                 s.send(f'NACK {ev}'.encode('utf-8'))
+
+    # execution done so remove result from resultsQueue
+    resultsQueue.pop(0)
     s.close()
 
 

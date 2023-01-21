@@ -15,10 +15,10 @@ import json
 import logging
 from geopy import distance
 
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 PAUSE_TIME = 10  # 1800 30min normal (35s test)
-TIMEOUT = 2
+TIMEOUT = 5
 
 # Create a socket object
 serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -84,7 +84,7 @@ def on_new_client(clientsocket, addr):
             # create a bid on interface
             ir.sendBid(ev, price, port)
             auctionned = True
-        if winner == ev and not winnerAck:
+        if winner == ev and not winnerAck and auctionned:
             logging.debug(f'Winning client is beeing contacted')
             # ask the client if accept the energy
             clientsocket.send("WON".encode('utf-8'))
@@ -95,10 +95,16 @@ def on_new_client(clientsocket, addr):
                 winnerAck = True
                 logging.info('Auction won')
                 clientsocket.close()
-            else:
+            elif data.decode('utf-8').startswith('NACK'):
                 winnerAck = False
                 logging.info('Auction lost')
                 clientsocket.close()
+        if winnerAck and auctionned:
+            logging.debug('Client has lost')
+            try:
+                clientsocket.send("LOST".encode('utf-8'))
+            except:
+                pass
     clientsocket.close()
 
 # energy thread

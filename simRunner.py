@@ -7,9 +7,9 @@ import requests
 
 requests.get("http://127.0.0.1:8080/reset")  # reset the Interface on launch
 
-nbMinClient = 1
-nbMaxClient = 5
-nbServer = 1
+nbMinClient = 5
+nbMaxClient = 10
+nbServer = 10
 
 ports = [4010 + i for i in range(nbServer)]
 
