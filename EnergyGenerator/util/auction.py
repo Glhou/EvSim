@@ -16,6 +16,15 @@ def searchClosest(bids, pos):
 
 
 def handleAuction(bids, energy, pos, port):
+    '''
+    Parameters : distance, energy, number of generator available of a bid
+    Here is the priority for the auction :
+    1. The bid with only one generator available has priority but :
+        a. If two or more bids are in this case you resolve with the remaining rules
+        b. If was rejected by other generator and now has only one generator, can "No choice" and join the list of one generator (go for a. or 1. directly)
+    2. The bid with the less energy
+    3. The bid with the less distance
+    '''
     print(f"Bidders : {', '.join([b['CarId'] for b in bids])}")
     closest = searchClosest(bids, pos)
     print(f'Closest bid : {closest}')

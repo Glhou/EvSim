@@ -51,6 +51,7 @@ def on_new_client(clientsocket, addr):
         data = clientsocket.recv(1024)
         message = data.decode('utf-8')
         if message.startswith("PRICE"):
+            # get the ev
             ev = json.loads(f'{{{message.split("{")[1]}'.replace('\'', '\"'))
             dist = distance.geodesic(
                 (ev['CarLat'], ev['CarLon']), (pos['lat'], pos['lon'])).km

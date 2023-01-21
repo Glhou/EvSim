@@ -19,6 +19,7 @@ PAUSE_TIME = 35  # 1800 = 30min normal (35s test)
 accepted = False
 prices = []
 generators = []
+nbOfGenerators = 0  # number of generators that the client connected to
 
 # Get the port number from the user
 try:
@@ -31,17 +32,12 @@ except:
 def handlePort(port):
     global accepted
     global generators
+    global nbOfGenerators
     # create a socket object
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # connect to the server
     s.connect((HOST, port))
-
-    # ask for Price to the server
-    s.send(f'PRICE {ev}'.encode('utf-8'))
-
-    # receive price from the server
-    price = int(s.recv(1024).decode('utf-8'))
 
     # ask for pos to the server
     s.send(f'POS {ev}'.encode('utf-8'))
@@ -51,6 +47,20 @@ def handlePort(port):
     # compute the distance in meter then put it in kilometers
     dist = int(ds.latlonDist(pos['lat'], pos['lon'],
                              ev['CarLat'], ev['CarLon']) / 1000)  # km
+
+    # add the nbOfGenerators if the generator is in range only, if not stop the connection
+    if dist > ev['CarRadius']:
+        s.close()
+        return -1
+    nbOfGenerators += 1
+    ev["NbOfGenerators"] = nbOfGenerators
+
+    # ask for Price to the server
+    s.send(f'PRICE {ev}'.encode('utf-8'))
+
+    # receive price from the server
+    price = int(s.recv(1024).decode('utf-8'))
+
     print(f'Generator is {dist}km from the car')
 
     print(f'Generator price is {price}')
