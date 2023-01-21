@@ -10,6 +10,7 @@ import threading
 import time
 import json
 import logging
+import requests
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -124,6 +125,20 @@ def handlePort(port):
     s.close()
 
 
+threads = []
 for port in ports:
     # create a thread for handle port
-    threading.Thread(target=handlePort, args=(int(port),)).start()
+    t = threading.Thread(target=handlePort, args=(int(port),))
+    t.start()
+    threads.append(t)
+
+# wait for all the threads to finish
+while any(t.is_alive() for t in threads):
+    pass
+
+if not generators:
+    requests.post('http://localhost:8080/ev', json=ev)
+    # wait PAUSE TIME
+    time.sleep(PAUSE_TIME)
+    ev['CarEnergy'] = -1
+    requests.post('http://localhost:8080/ev', json=ev)
