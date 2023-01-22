@@ -15,7 +15,7 @@ import json
 import logging
 from geopy import distance
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.WARNING)
 
 PAUSE_TIME = 10  # 1800 30min normal (35s test)
 TIMEOUT = 5

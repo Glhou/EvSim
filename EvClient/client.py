@@ -3,6 +3,7 @@
 import util.generateData as gd
 import util.distance as ds
 import util.chooseGenerator as cg
+import util.data as dt
 
 import socket
 import sys
@@ -64,7 +65,7 @@ def handlePort(port):
         s.close()
         return -1
     nbOfGenerators += 1
-    ev["NbOfGenerators"] = nbOfGenerators
+    ev["CarNbGenerator"] = nbOfGenerators
 
     # ask for Price to the server
     s.send(f'PRICE {ev}'.encode('utf-8'))
@@ -142,3 +143,6 @@ if not generators:
     time.sleep(PAUSE_TIME)
     ev['CarEnergy'] = -1
     requests.post('http://localhost:8080/ev', json=ev)
+
+# get datas
+dt.connectionStatus(acceptedEnergy)
