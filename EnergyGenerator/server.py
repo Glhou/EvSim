@@ -6,6 +6,7 @@
 import util.generateData as gd
 import util.interfaceRequests as ir
 import util.auction as au
+import util.data as dt
 
 import socket
 import threading
@@ -17,11 +18,21 @@ from geopy import distance
 
 logging.basicConfig(level=logging.WARNING)
 
-PAUSE_TIME = 10  # 1800 30min normal (35s test)
-TIMEOUT = 5
+# set parameters form arguments
+try:
+    PAUSE_TIME = int(sys.argv[2])
+except:
+    PAUSE_TIME = 10  # 1800 30min normal (35s test)
+
+try:
+    TIMEOUT = int(sys.argv[3])
+except:
+    TIMEOUT = 5
+
 
 # Create a socket object
 serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
 # Get local machine name
 host = socket.gethostname()
@@ -122,6 +133,7 @@ def energyThread():
         # do the auction or/and create new energy every 30 min
         time.sleep(PAUSE_TIME)  # 1800 = 30 min (35s in test)
         if bids:
+            dt.numberOfBidsAtAuction(bids)
             # do the auction
             logging.info('Auction in comming :')
             winnerAck = False

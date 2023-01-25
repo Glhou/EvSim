@@ -12,6 +12,7 @@ import time
 import json
 import logging
 import requests
+import atexit
 
 logging.basicConfig(level=logging.WARNING)
 
@@ -19,11 +20,23 @@ ev = gd.generateEv()
 
 HOST = 'glenn-ubuntu'
 
-PAUSE_TIME = 10  # 1800 = 30min normal (35s test)
-TIMEOUT = 5
+# set parameters form arguments
+try:
+    PAUSE_TIME = int(sys.argv[2])
+except:
+    PAUSE_TIME = 10
+
+try:
+    TIMEOUT = int(sys.argv[3])
+except:
+    TIMEOUT = 5
 
 # If one of the generator in the X less pricy reply you are a winner you accept
-NB_BEST_GENERATOR = 2
+try:
+    NB_BEST_GENERATOR = int(sys.argv[4])
+except:
+    NB_BEST_GENERATOR = 2
+
 
 acceptedEnergy = False
 prices = []
@@ -33,7 +46,7 @@ resultsQueue = []
 
 # Get the port number from the user
 try:
-    ports = sys.argv[1:]
+    ports = sys.argv[1].split(',')
 except:
     logging.error(
         "Please enter a list of ports number (ex : python client.py 4442 4443 ...")
@@ -98,9 +111,17 @@ def handlePort(port):
     result = s.recv(1024).decode('utf-8')
     resultsQueue.append(result)
 
+    start_process = time.time()
+
     # wait for the results to be first in the results queue
     while resultsQueue[0] != result:
-        time.sleep(0.1)
+        time.sleep(0.5)
+        if time.time() - start_process > TIMEOUT*4:
+            logging.info(f'Rejected the auction for {port}')
+            s.send(f'NACK {ev}'.encode('utf-8'))
+            resultsQueue.pop(0)
+            s.close()
+            return -1
 
     if result.startswith('WON') and not acceptedEnergy:
         if port in bestPorts and not acceptedEnergy:
@@ -126,6 +147,8 @@ def handlePort(port):
     s.close()
 
 
+start_time = time.time()
+
 threads = []
 for port in ports:
     # create a thread for handle port
@@ -137,12 +160,17 @@ for port in ports:
 while any(t.is_alive() for t in threads):
     pass
 
-if not generators:
-    requests.post('http://localhost:8080/ev', json=ev)
-    # wait PAUSE TIME
-    time.sleep(PAUSE_TIME)
-    ev['CarEnergy'] = -1
-    requests.post('http://localhost:8080/ev', json=ev)
+
+def exitFun(generators, ev):
+    if not generators:
+        requests.post('http://localhost:8080/ev', json=ev)
+        # wait PAUSE TIME
+        time.sleep(PAUSE_TIME)
+        ev['CarEnergy'] = -1
+        requests.post('http://localhost:8080/ev', json=ev)
+
+
+atexit.register(exitFun, generators, ev)  # icon at the end on the interface
 
 # get datas
-dt.connectionStatus(acceptedEnergy)
+dt.connectionStatus(acceptedEnergy, start_time)
