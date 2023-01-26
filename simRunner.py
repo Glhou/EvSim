@@ -7,6 +7,9 @@ import subprocess
 from multiprocessing import Manager
 import sys
 
+from EvClient.client import client
+from EnergyGenerator.server import server
+
 # check if data/connectionStatus.csv and data/numberOfBids.csv exists delete it if True
 if os.path.exists('data/connectionStatus.csv'):
     os.remove('data/connectionStatus.csv')

@@ -16,44 +16,8 @@ import atexit
 
 logging.basicConfig(level=logging.WARNING)
 
-ev = gd.generateEv()
 
-HOST = 'glenn-ubuntu'
-
-# set parameters form arguments
-try:
-    PAUSE_TIME = int(sys.argv[2])
-except:
-    PAUSE_TIME = 10
-
-try:
-    TIMEOUT = int(sys.argv[3])
-except:
-    TIMEOUT = 5
-
-# If one of the generator in the X less pricy reply you are a winner you accept
-try:
-    NB_BEST_GENERATOR = int(sys.argv[4])
-except:
-    NB_BEST_GENERATOR = 2
-
-
-acceptedEnergy = False
-prices = []
-generators = []
-nbOfGenerators = 0  # number of generators that the client connected to
-resultsQueue = []
-
-# Get the port number from the user
-try:
-    ports = sys.argv[1].split(',')
-except:
-    logging.error(
-        "Please enter a list of ports number (ex : python client.py 4442 4443 ...")
-    sys.exit()
-
-
-def handlePort(port):
+def handlePort(port, ev, host, pauseTime, timeout, nbBestGenerator):
     global acceptedEnergy
     global generators
     global nbOfGenerators
@@ -62,7 +26,7 @@ def handlePort(port):
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
     # connect to the server
-    s.connect((HOST, port))
+    s.connect((host, port))
 
     # ask for pos to the server
     s.send(f'POS {ev}'.encode('utf-8'))
@@ -101,7 +65,7 @@ def handlePort(port):
 
     # get the X less pricy generators, if one reply we automatically say ok
     bestPorts = cg.chooseBestsPorts(
-        generators, ev['CarRadius'], NB_BEST_GENERATOR)
+        generators, ev['CarRadius'], nbBestGenerator)
 
     # accept all offer
     logging.info(f'Accepting {port} offer for {price}')
@@ -116,7 +80,7 @@ def handlePort(port):
     # wait for the results to be first in the results queue
     while resultsQueue[0] != result:
         time.sleep(0.5)
-        if time.time() - start_process > TIMEOUT*4:
+        if time.time() - start_process > timout*4:
             logging.info(f'Rejected the auction for {port}')
             s.send(f'NACK {ev}'.encode('utf-8'))
             resultsQueue.pop(0)
@@ -130,8 +94,8 @@ def handlePort(port):
             logging.info(f'Won the auction for {port}')
             s.send(f'ACK {ev}'.encode('utf-8'))
         else:
-            # wait for half timeout
-            time.sleep(TIMEOUT / 2)
+            # wait for half timout
+            time.sleep(timout / 2)
             if not acceptedEnergy:
                 # if we didn't get any other offer, we accept the offer
                 acceptedEnergy = True
@@ -147,30 +111,75 @@ def handlePort(port):
     s.close()
 
 
-start_time = time.time()
+def client(ports, pauseTime, timeout, nbBestGenerator):
+    global acceptedEnergy
+    global generators
+    global nbOfGenerators
+    global resultsQueue
 
-threads = []
-for port in ports:
-    # create a thread for handle port
-    t = threading.Thread(target=handlePort, args=(int(port),))
-    t.start()
-    threads.append(t)
+    ev = gd.generateEv()
 
-# wait for all the threads to finish
-while any(t.is_alive() for t in threads):
-    pass
+    host = 'glenn-ubuntu'
+
+    acceptedEnergy = False
+    prices = []
+    generators = []
+    nbOfGenerators = 0  # number of generators that the client connected to
+    resultsQueue = []
+
+    start_time = time.time()
+
+    threads = []
+    for port in ports:
+        # create a thread for handle port
+        t = threading.Thread(target=handlePort, args=(
+            int(port), ev, host, pauseTime, timeout, nbBestGenerator,))
+        t.start()
+        threads.append(t)
+
+    # wait for all the threads to finish
+    while any(t.is_alive() for t in threads):
+        pass
+
+    # get datas
+    dt.connectionStatus(acceptedEnergy, start_time)
+
+    def exitFun(generators, ev):
+        if not generators:
+            requests.post('http://localhost:8080/ev', json=ev)
+            # wait PAUSE TIME
+            time.sleep(pauseTime)
+            ev['CarEnergy'] = -1
+            requests.post('http://localhost:8080/ev', json=ev)
+
+    # icon at the end on the interface
+    atexit.register(exitFun, generators, ev)
 
 
-def exitFun(generators, ev):
-    if not generators:
-        requests.post('http://localhost:8080/ev', json=ev)
-        # wait PAUSE TIME
-        time.sleep(PAUSE_TIME)
-        ev['CarEnergy'] = -1
-        requests.post('http://localhost:8080/ev', json=ev)
+if __name__ == '__main__':
+    # set parameters form arguments
+    try:
+        pauseTime = int(sys.argv[2])
+    except:
+        pauseTime = 10
 
+    try:
+        timout = int(sys.argv[3])
+    except:
+        timout = 5
 
-atexit.register(exitFun, generators, ev)  # icon at the end on the interface
+    # If one of the generator in the X less pricy reply you are a winner you accept
+    try:
+        nbBestGenerator = int(sys.argv[4])
+    except:
+        nbBestGenerator = 2
 
-# get datas
-dt.connectionStatus(acceptedEnergy, start_time)
+    # Get the port number from the user
+    try:
+        ports = sys.argv[1].split(',')
+    except:
+        logging.error(
+            "Please enter a list of ports number (ex : python client.py 4442 4443 ...")
+        sys.exit()
+
+    client(ports, pauseTime, timout, nbBestGenerator)

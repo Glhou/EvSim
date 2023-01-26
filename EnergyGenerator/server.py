@@ -18,41 +18,6 @@ from geopy import distance
 
 logging.basicConfig(level=logging.WARNING)
 
-# set parameters form arguments
-try:
-    PAUSE_TIME = int(sys.argv[2])
-except:
-    PAUSE_TIME = 10  # 1800 30min normal (35s test)
-
-try:
-    TIMEOUT = int(sys.argv[3])
-except:
-    TIMEOUT = 5
-
-
-# Create a socket object
-serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-# Get local machine name
-host = socket.gethostname()
-
-# Get the port number from the user
-try:
-    port = int(sys.argv[1])
-except:
-    logging.error("Please enter a port number")
-    sys.exit()
-
-logging.info(f"Host: {host}:{port}")
-# Bind to the port
-serversocket.bind((host, port))
-
-# Queue up to 5 requests
-serversocket.listen(5)
-
-# Create a new thread for each connection
-
 
 def on_new_client(clientsocket, addr):
     global port
@@ -121,7 +86,7 @@ def on_new_client(clientsocket, addr):
 # energy thread
 
 
-def energyThread():
+def energyThread(pauseTime, timeout):
     global energy
     global pos
     global port
@@ -131,7 +96,7 @@ def energyThread():
     global winnerAck
     while True:
         # do the auction or/and create new energy every 30 min
-        time.sleep(PAUSE_TIME)  # 1800 = 30 min (35s in test)
+        time.sleep(pauseTime)  # 1800 = 30 min (35s in test)
         if bids:
             dt.numberOfBidsAtAuction(bids)
             # do the auction
@@ -140,7 +105,7 @@ def energyThread():
             while not winnerAck and bids:
                 winner = au.handleAuction(bids, energy, pos)
                 # send a message to the winner in the on_new_client thread
-                time.sleep(TIMEOUT)  # timeout for client to reply
+                time.sleep(timeout)  # timeout for client to reply
                 if not winnerAck:
                     bids.remove(winner)  # we remove the winner and change it
                     winner = None
@@ -148,7 +113,7 @@ def energyThread():
                 logging.info(f'Winner is {winner}')
                 ir.sendAuction(f"tok-{port}", winner['CarId'])
                 soldState = True
-                time.sleep(PAUSE_TIME)
+                time.sleep(pauseTime)
         createEnergy()
         soldState = False
 
@@ -165,20 +130,67 @@ def createEnergy():
         f'New Energy :\nBasePrice : {energy["basePrice"]}, CreatedTime: {energy["createdTime"]}')
 
 
-pos = gd.generatePos()
-logging.info(f'Server pos : {pos["lat"]},{pos["lon"]}')
+def server(port, pauseTime, timeout):
+    global pos
+    global port
+    global energy
+    global bids
+    global soldState
+    global winner
+    global winnerAck
 
-createEnergy()
-soldState = False
-winner = None
-winnerAck = False
+    # Create a socket object
+    serversocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    serversocket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
-# start thread for energy
-threading.Thread(target=energyThread).start()
+    # Get local machine name
+    host = socket.gethostname()
 
-while True:
-    # Establish a connection
-    clientsocket, addr = serversocket.accept()
+    logging.info(f"Host: {host}:{port}")
+    # Bind to the port
+    serversocket.bind((host, port))
+
+    # Queue up to 5 requests
+    serversocket.listen(5)
+
     # Create a new thread for each connection
-    threading.Thread(target=on_new_client,
-                     args=(clientsocket, addr)).start()
+
+    pos = gd.generatePos()
+    logging.info(f'Server pos : {pos["lat"]},{pos["lon"]}')
+
+    createEnergy()
+    soldState = False
+    winner = None
+    winnerAck = False
+
+    # start thread for energy
+    threading.Thread(target=energyThread, args=(pauseTime, timeout,)).start()
+
+    while True:
+        # Establish a connection
+        clientsocket, addr = serversocket.accept()
+        # Create a new thread for each connection
+        threading.Thread(target=on_new_client,
+                         args=(clientsocket, addr)).start()
+
+
+if __name__ == "__main__":
+    # set parameters form arguments
+    try:
+        pauseTime = int(sys.argv[2])
+    except:
+        pauseTime = 10  # 1800 30min normal (35s test)
+
+    try:
+        timeout = int(sys.argv[3])
+    except:
+        timeout = 5
+
+    # Get the port number from the user
+    try:
+        port = int(sys.argv[1])
+    except:
+        logging.error("Please enter a port number")
+        sys.exit()
+
+    server(port, pauseTime, timeout)

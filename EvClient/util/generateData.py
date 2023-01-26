@@ -10,7 +10,7 @@ def generateEv():
     hashName = hashlib.sha256(f'{lat}:{lon}'.encode()).hexdigest()
     idName = f'Ev-{hashName}'
     energy = random.randint(0, 100)
-    radius = 10 * energy / 100
+    radius = 10 * (1 - energy / 100)
     maxPrice = random.uniform(5, 20)
     return {
         "CarId": idName,
